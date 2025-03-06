@@ -8,9 +8,18 @@ const Login = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setError(null);
+
+    // ✅ Log in with email and password only
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError(error.message);
-    else window.location.href = "/dashboard"; // Redirect to dashboard
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    alert("Login successful!");
+    window.location.href = "/dashboard"; // Redirect after login
   };
 
   return (
@@ -23,7 +32,7 @@ const Login = () => {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-400"
+            className="w-full p-3 rounded bg-gray-700 border border-gray-600"
             required
           />
           <input
@@ -31,17 +40,15 @@ const Login = () => {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-400"
+            className="w-full p-3 rounded bg-gray-700 border border-gray-600"
             required
           />
-          <button
-            type="submit"
-            className="w-full p-3 bg-green-500 rounded hover:bg-green-600 transition"
-          >
+          <button type="submit" className="w-full p-3 bg-green-500 rounded">
             Login
           </button>
         </form>
         {error && <p className="text-red-500 text-center mt-2">{error}</p>}
+
         <p className="text-center mt-4 text-gray-400">
           Don't have an account? <a href="/signup" className="text-green-400">Sign up</a>
         </p>

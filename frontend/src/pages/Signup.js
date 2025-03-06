@@ -4,13 +4,27 @@ import { supabase } from "../supabase";
 const Signup = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState(null);
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) setError(error.message);
-    else alert("Check your email for confirmation!");
+    setError(null);
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { display_name: username }, 
+      },
+    });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    alert("Signup successful! Check your email to confirm.");
   };
 
   return (
@@ -19,11 +33,19 @@ const Signup = () => {
         <h2 className="text-3xl font-bold text-center mb-6">Sign Up</h2>
         <form onSubmit={handleSignup} className="space-y-4">
           <input
+            type="text"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full p-3 rounded bg-gray-700 border border-gray-600"
+            required
+          />
+          <input
             type="email"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-400"
+            className="w-full p-3 rounded bg-gray-700 border border-gray-600"
             required
           />
           <input
@@ -31,20 +53,14 @@ const Signup = () => {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-400"
+            className="w-full p-3 rounded bg-gray-700 border border-gray-600"
             required
           />
-          <button
-            type="submit"
-            className="w-full p-3 bg-green-500 rounded hover:bg-green-600 transition"
-          >
+          <button type="submit" className="w-full p-3 bg-green-500 rounded">
             Sign Up
           </button>
         </form>
         {error && <p className="text-red-500 text-center mt-2">{error}</p>}
-        <p className="text-center mt-4 text-gray-400">
-          Already have an account? <a href="/" className="text-green-400">Login</a>
-        </p>
       </div>
     </div>
   );
