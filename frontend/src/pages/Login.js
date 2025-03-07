@@ -77,7 +77,7 @@ const Login = () => {
 
         {/* Spotify Button */}
         <button onClick={handleConnectSpotify} className="mt-6 w-full p-3 bg-gray-700 rounded border border-gray-500 text-white font-semibold hover:bg-gray-600 transition">
-          Connect Spotify
+          Connect Apple Music
         </button>
 
         {/* Error Message */}
