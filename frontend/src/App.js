@@ -3,6 +3,8 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword"; 
+import Dashboard from "./pages/Dashboard";
+
 
 function App() {
   return (
@@ -12,7 +14,7 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} /> {/* New Route */}
-        <Route path="/dashboard" element={<h1 className="text-white text-center mt-20">Dashboard (Coming Soon)</h1>} />
+        <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
     </Router>
   );
