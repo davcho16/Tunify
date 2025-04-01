@@ -1,51 +1,53 @@
+// frontend/src/pages/Login.js
 import { useState } from "react";
 import { supabase } from "../supabase";
 import { useNavigate } from "react-router-dom";
+import { spotifyAuth } from "../utils/spotify";
 
+/**
+ * Login component for user authentication
+ */
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
   const navigate = useNavigate();
-//supabase Log-in
+
+  /**
+   * Handle Supabase email/password login
+   */
   const handleLogin = async (e) => {
     e.preventDefault();
     setError(null);
+    setIsLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Login error:", error);
       setError(error.message);
-      return;
+    } finally {
+      setIsLoading(false);
     }
-
-    alert("Login successful!");
-    navigate("/dashboard");
   };
-//Spotify OAuth
-const handleConnectSpotify = () => {
-  localStorage.removeItem("spotify_access_token"); // 🔁 start fresh
 
-  const clientId = "182f6f4353a244fd846d4bfcf29b96ab";
-  const redirectUri = "http://localhost:3000/callback"; // must match Spotify settings exactly
-
-  const scopes = [
-    "user-read-private",
-    "user-read-email",
-    "user-top-read",
-    "playlist-read-private",
-  ];
-
-  const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(
-    redirectUri
-  )}&scope=${scopes.join("%20")}&show_dialog=true`;
-
-  window.location.href = authUrl;
-};
-
+  /**
+   * Handle Spotify OAuth login
+   */
+  const handleConnectSpotify = () => {
+    spotifyAuth.authorize();
+  };
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-900">
@@ -58,19 +60,25 @@ const handleConnectSpotify = () => {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full p-3 rounded bg-gray-700 border border-gray-600"
+            className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
             required
+            disabled={isLoading}
           />
           <input
             type="password"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-3 rounded bg-gray-700 border border-gray-600"
+            className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
             required
+            disabled={isLoading}
           />
-          <button type="submit" className="w-full p-3 bg-green-500 rounded font-bold hover:bg-green-600">
-            Login
+          <button 
+            type="submit" 
+            className="w-full p-3 bg-green-500 rounded font-bold hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed"
+            disabled={isLoading}
+          >
+            {isLoading ? "Logging in..." : "Login"}
           </button>
         </form>
 
@@ -86,14 +94,25 @@ const handleConnectSpotify = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleConnectSpotify}
-          className="mt-6 w-full p-3 bg-green-600 rounded border border-green-500 text-white font-semibold hover:bg-green-700 transition"
-        >
-          Connect Spotify
-        </button>
+        <div className="mt-8 w-full">
+          <div className="relative mb-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-600"></div>
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-gray-800 px-4 text-sm text-gray-400">Or continue with</span>
+            </div>
+          </div>
+          
+          <button
+            onClick={handleConnectSpotify}
+            className="w-full p-3 bg-green-600 rounded border border-green-500 text-white font-semibold hover:bg-green-700 transition flex items-center justify-center"
+          >
+            <span>Connect with Spotify</span>
+          </button>
+        </div>
 
-        {error && <p className="text-red-500 text-center mt-2">{error}</p>}
+        {error && <p className="text-red-500 text-center mt-4">{error}</p>}
       </div>
     </div>
   );
