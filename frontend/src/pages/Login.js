@@ -2,22 +2,15 @@
 import { useState } from "react";
 import { supabase } from "../supabase";
 import { useNavigate } from "react-router-dom";
-import { spotifyAuth } from "../utils/spotify";
 
-/**
- * Login component for user authentication
- */
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const navigate = useNavigate();
 
-  /**
-   * Handle Supabase email/password login
-   */
   const handleLogin = async (e) => {
     e.preventDefault();
     setError(null);
@@ -29,10 +22,7 @@ const Login = () => {
         password,
       });
 
-      if (error) {
-        throw new Error(error.message);
-      }
-
+      if (error) throw new Error(error.message);
       navigate("/dashboard");
     } catch (error) {
       console.error("Login error:", error);
@@ -40,13 +30,6 @@ const Login = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  /**
-   * Handle Spotify OAuth login
-   */
-  const handleConnectSpotify = () => {
-    spotifyAuth.authorize();
   };
 
   return (
@@ -73,8 +56,8 @@ const Login = () => {
             required
             disabled={isLoading}
           />
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="w-full p-3 bg-green-500 rounded font-bold hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed"
             disabled={isLoading}
           >
@@ -83,33 +66,13 @@ const Login = () => {
         </form>
 
         <div className="text-center mt-4 text-gray-400">
-          <p className="hover:text-white cursor-pointer" onClick={() => navigate("/forgot-password")}>
-            Forgot password?
-          </p>
+          <p className="hover:text-white cursor-pointer" onClick={() => navigate("/forgot-password")}>Forgot password?</p>
           <p>
-            Don't have an account?{" "}
+            Don't have an account? {" "}
             <span className="text-green-400 hover:underline cursor-pointer" onClick={() => navigate("/signup")}>
               Sign up
             </span>
           </p>
-        </div>
-
-        <div className="mt-8 w-full">
-          <div className="relative mb-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-600"></div>
-            </div>
-            <div className="relative flex justify-center">
-              <span className="bg-gray-800 px-4 text-sm text-gray-400">Or continue with</span>
-            </div>
-          </div>
-          
-          <button
-            onClick={handleConnectSpotify}
-            className="w-full p-3 bg-green-600 rounded border border-green-500 text-white font-semibold hover:bg-green-700 transition flex items-center justify-center"
-          >
-            <span>Connect with Spotify</span>
-          </button>
         </div>
 
         {error && <p className="text-red-500 text-center mt-4">{error}</p>}
