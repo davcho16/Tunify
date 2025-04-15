@@ -1,8 +1,12 @@
 // backend/index.js
+require("dotenv").config({ path: './backend/.env' });
 const express = require("express");
+
 const cors = require("cors");
+const fs = require("fs");
+const path = require("path")
+const csv = require("csv-parser")
 const { createClient } = require("@supabase/supabase-js");
-require("dotenv").config();
 
 const app = express();
 const PORT = 3001;
@@ -80,6 +84,42 @@ app.post("/api/recommend", async (req, res) => {
     console.error("Recommendation error:", err);
     res.status(500).json({ error: err.message });
   }
+});
+
+app.get("/api/recommend-cluster", async (req, res) => {
+  const { id, cluster = "cluster3", n = 5 } = req.query;
+
+  if (!id) {
+    return res.status(400).json({ error: "Missing track ID" });
+  }
+
+  const filePath = path.join(__dirname, "rec_data", "songs_with_clusters.csv");
+  const results = [];
+
+  fs.createReadStream(filePath)
+    .pipe(csv())
+    .on("data", (data) => results.push(data))
+    .on("end", () => {
+      const inputSong = results.find((song) => song.id === id);
+      if (!inputSong) {
+        return res.status(404).json({ error: "Song not found in dataset" });
+      }
+
+      const clusterValue = inputSong[cluster];
+      if (!clusterValue) {
+        return res.status(400).json({ error: `Cluster column '${cluster}' not found on song` });
+      }
+
+      const recommendations = results
+        .filter((song) => song.id !== id && song[cluster] === clusterValue)
+        .slice(0, parseInt(n));
+
+      res.json({ recommendations });
+    })
+    .on("error", (err) => {
+      console.error("CSV read error:", err);
+      res.status(500).json({ error: "Failed to load recommendation data" });
+    });
 });
 
 app.listen(PORT, () => {
