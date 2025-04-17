@@ -86,13 +86,17 @@ app.post("/api/recommend", async (req, res) => {
   }
 });
 
+// ML recommendation API endpoint
 app.get("/api/recommend-cluster", async (req, res) => {
+  // query: takes 3 song ids and a number of songs that should be returned
   const { id1, id2, id3, n = 3 } = req.query;
 
-  if (!id1 || !id2 || !id3) {
-    return res.status(400).json({ error: "Three track IDs are required (id1, id2, id3)" });
+  // Enforces unique IDs
+  if (!id1 || !id2 || !id3 || id3 === id2 || id1 === id3 || id2 === id1 ) {
+    return res.status(400).json({ error: "Three unique track IDs are required (id1, id2, id3)" });
   }
 
+  // Goes to the data path
   const filePath = path.join(__dirname, "rec_data", "songs_with_clusters.csv");
   const results = [];
 
@@ -104,6 +108,7 @@ app.get("/api/recommend-cluster", async (req, res) => {
         results.find((song) => song.id === id)
     );
       
+      // Checks whether all input IDs exist in the data file
       if (inputSongs.includes(undefined)) {
         return res.status(404).json({ error: "One or more input songs not found" });
       }
@@ -112,6 +117,7 @@ app.get("/api/recommend-cluster", async (req, res) => {
       let matchedCluster = null;
       let sharedValue = null;
 
+      // Searches for a cluster grouping (1-5) where all three songs share clusterValue
       for (const cluster of clusterNames) {
         const values = inputSongs.map((song) => song[cluster]);
         if (values.every((val) => val === values[0])) {
@@ -121,10 +127,17 @@ app.get("/api/recommend-cluster", async (req, res) => {
         }
       }
 
+      // Returns this response if no clusterValue match for all three songs in any cluster grouping
       if (!matchedCluster) {
         return res.status(404).json({ error: "No shared cluster found among all 3 songs across any cluster grouping (1-5)" });
       }
 
+      // If finds clusterValue match for all three songs in a cluster grouping,
+      // returns (at most) the n most popular songs that match the clusterValue of the three input songs,
+      // excluding the three input songs
+      // i.e., if the three songs share a value 37 in cluster3, the function will look for all other songs in cluster3
+      // that match the value 37, sort them by popularity, and return the n most popular
+      // ASSUMES there are always more than 3 songs that share one clusterValue
       const recommendations = results
         .filter((song) =>
           ![id1, id2, id3].includes(song.id) && 
@@ -133,10 +146,11 @@ app.get("/api/recommend-cluster", async (req, res) => {
         .sort((a, b) => parseInt(b.popularity) - parseInt(a.popularity))
         .slice(0, parseInt(n));
       
+      // the returned response
       res.json({
-        matchedCluster,
-        sharedValue,
-        recommendations
+        matchedCluster, // cluster where the matching value is found for all three input songs
+        sharedValue,    // matching value
+        recommendations // song recs
       });
     })
     .on("error", (err) => {
