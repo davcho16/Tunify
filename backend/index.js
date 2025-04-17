@@ -137,7 +137,7 @@ app.get("/api/recommend-cluster", async (req, res) => {
       // excluding the three input songs
       // i.e., if the three songs share a value 37 in cluster3, the function will look for all other songs in cluster3
       // that match the value 37, sort them by popularity, and return the n most popular
-      // ASSUMES there are always more than 3 songs that share one clusterValue
+      // ASSUMES there are always more than 3 songs that share one clusterValue in at least one cluster grouping
       const recommendations = results
         .filter((song) =>
           ![id1, id2, id3].includes(song.id) && 
