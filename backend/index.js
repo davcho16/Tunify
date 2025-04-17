@@ -87,10 +87,10 @@ app.post("/api/recommend", async (req, res) => {
 });
 
 app.get("/api/recommend-cluster", async (req, res) => {
-  const { id, cluster = "cluster3", n = 5 } = req.query;
+  const { id1, id2, id3, n = 3 } = req.query;
 
-  if (!id) {
-    return res.status(400).json({ error: "Missing track ID" });
+  if (!id1 || !id2 || !id3) {
+    return res.status(400).json({ error: "Three track IDs are required (id1, id2, id3)" });
   }
 
   const filePath = path.join(__dirname, "rec_data", "songs_with_clusters.csv");
@@ -100,21 +100,44 @@ app.get("/api/recommend-cluster", async (req, res) => {
     .pipe(csv())
     .on("data", (data) => results.push(data))
     .on("end", () => {
-      const inputSong = results.find((song) => song.id === id);
-      if (!inputSong) {
-        return res.status(404).json({ error: "Song not found in dataset" });
+      const inputSongs = [id1, id2, id3].map((id) => 
+        results.find((song) => song.id === id)
+    );
+      
+      if (inputSongs.includes(undefined)) {
+        return res.status(404).json({ error: "One or more input songs not found" });
       }
 
-      const clusterValue = inputSong[cluster];
-      if (!clusterValue) {
-        return res.status(400).json({ error: `Cluster column '${cluster}' not found on song` });
+      const clusterNames = ["cluster1","cluster2","cluster3","cluster4","cluster5"];
+      let matchedCluster = null;
+      let sharedValue = null;
+
+      for (const cluster of clusterNames) {
+        const values = inputSongs.map((song) => song[cluster]);
+        if (values.every((val) => val === values[0])) {
+          matchedCluster = cluster;
+          sharedValue = values[0];
+          break;
+        }
+      }
+
+      if (!matchedCluster) {
+        return res.status(404).json({ error: "No shared cluster found among all 3 songs across any cluster grouping (1-5)" });
       }
 
       const recommendations = results
-        .filter((song) => song.id !== id && song[cluster] === clusterValue)
+        .filter((song) =>
+          ![id1, id2, id3].includes(song.id) && 
+        song[matchedCluster] === sharedValue
+        )
+        .sort((a, b) => parseInt(b.popularity) - parseInt(a.popularity))
         .slice(0, parseInt(n));
-
-      res.json({ recommendations });
+      
+      res.json({
+        matchedCluster,
+        sharedValue,
+        recommendations
+      });
     })
     .on("error", (err) => {
       console.error("CSV read error:", err);
