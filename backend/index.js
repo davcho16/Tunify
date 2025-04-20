@@ -127,9 +127,31 @@ app.get("/api/recommend-cluster", async (req, res) => {
         }
       }
 
-      // Returns this response if no clusterValue match for all three songs in any cluster grouping
+      // Looks for 2 matches, instead, if no clusterValue match for all three songs in any cluster grouping
       if (!matchedCluster) {
-        return res.status(404).json({ error: "No shared cluster found among all 3 songs across any cluster grouping (1-5)" });
+        for (const cluster of clusterNames) {
+          const values = inputSongs.map((song) => song[cluster]);
+          if (values[0] === values[1] || values[0] === values[2]) {
+            matchedCluster = cluster;
+            sharedValue = values[0];
+            break;
+          }
+          if (values[1] === values[2]) {
+            matchedCluster = cluster;
+            sharedValue = values[1];
+            break;
+          }
+        }
+
+        if (!matchedCluster) {
+          const values = inputSongs.map((song) => song[cluster]);
+          matchedCluster = "cluster1";
+          sharedValue = values[0];
+        }
+
+        if (!matchedCluster) {
+          return res.status(404).json({ error: "No result :(" });
+        }
       }
 
       // If finds clusterValue match for all three songs in a cluster grouping,
@@ -148,7 +170,7 @@ app.get("/api/recommend-cluster", async (req, res) => {
       
       // the returned response
       res.json({
-        matchedCluster, // cluster where the matching value is found for all three input songs
+        matchedCluster, // cluster where the matching value is found wrt input songs
         sharedValue,    // matching value
         recommendations // song recs
       });
