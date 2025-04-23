@@ -1,4 +1,3 @@
-// frontend/src/pages/Dashboard.js
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { useNavigate } from "react-router-dom";
@@ -8,9 +7,6 @@ const Dashboard = () => {
   const [trackSearch, setTrackSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [selectedTracks, setSelectedTracks] = useState([]);
-  const [recommendations, setRecommendations] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [isRecommending, setIsRecommending] = useState(false);
   const [error, setError] = useState(null);
 
   const navigate = useNavigate();
@@ -18,9 +14,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           navigate("/");
           return;
@@ -41,65 +35,54 @@ const Dashboard = () => {
   const handleSearchTrack = async () => {
     if (!trackSearch.trim()) return;
     setError(null);
-    setIsSearching(true);
     setSearchResults([]);
 
     try {
-      const { data, error } = await supabase
-        .from("tracks")
-        .select("id, name, artists")
-        .or(`name.ilike.%${trackSearch}%,artists.ilike.%${trackSearch}%`)
-        .limit(15);
+      const response = await fetch(`http://localhost:3001/api/search?query=${encodeURIComponent(trackSearch)}`);
+      const data = await response.json();
 
-      if (error) throw error;
-      setSearchResults(data);
+      if (!response.ok) throw new Error(data.error || "Search failed");
+      setSearchResults(data.results);
     } catch (error) {
       console.error("Search error:", error);
       setError("Failed to search: " + error.message);
-    } finally {
-      setIsSearching(false);
     }
   };
 
   const toggleTrackSelection = (track) => {
-    const isSelected = selectedTracks.some((t) => t.id === track.id);
+    const isSelected = selectedTracks.some((t) => t.song_id === track.song_id);
     if (isSelected) {
-      setSelectedTracks(selectedTracks.filter((t) => t.id !== track.id));
+      setSelectedTracks(selectedTracks.filter((t) => t.song_id !== track.song_id));
     } else if (selectedTracks.length < 3) {
       setSelectedTracks([...selectedTracks, track]);
     }
   };
 
   const handleRecommend = async () => {
-    if (selectedTracks.length === 0) return;
+    if (selectedTracks.length !== 3) {
+      setError("Please select exactly 3 tracks for recommendations.");
+      return;
+    }
 
-    setIsRecommending(true);
-    setRecommendations([]);
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:3001/api/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          selectedTrackIds: selectedTracks.map((t) => t.id),
-        }),
-      });
-
+      const ids = selectedTracks.map((t) => t.song_id).join(",");
+      const response = await fetch(`http://localhost:3001/api/recommend-cluster?ids=${ids}&n=3`);
       const data = await response.json();
 
       if (!response.ok) throw new Error(data.error || "Recommendation failed");
 
-      if (!data.recommendation) {
+      if (!data.recommendations || data.recommendations.length === 0) {
         setError("No similar song found.");
       } else {
-        setRecommendations([data.recommendation]);
+        navigate("/recommendation", {
+          state: { recommendations: data.recommendations }
+        });
       }
     } catch (err) {
       console.error("Recommend error:", err);
       setError(err.message);
-    } finally {
-      setIsRecommending(false);
     }
   };
 
@@ -133,9 +116,9 @@ const Dashboard = () => {
             <button
               onClick={handleSearchTrack}
               className="mt-3 w-full p-3 bg-green-500 rounded font-bold hover:bg-green-600 disabled:bg-gray-600"
-              disabled={!trackSearch.trim() || isSearching}
+              disabled={!trackSearch.trim()}
             >
-              {isSearching ? "Searching..." : "Search Track"}
+              Search Track
             </button>
           </div>
 
@@ -144,10 +127,10 @@ const Dashboard = () => {
               <h3 className="text-lg font-bold mb-2">Search Results</h3>
               <div className="space-y-2">
                 {searchResults.map((track) => {
-                  const isSelected = selectedTracks.some((t) => t.id === track.id);
+                  const isSelected = selectedTracks.some((t) => t.song_id === track.song_id);
                   return (
                     <div
-                      key={track.id}
+                      key={track.song_id}
                       onClick={() => toggleTrackSelection(track)}
                       className={`flex justify-between items-center bg-gray-800 p-3 rounded cursor-pointer hover:bg-gray-700 ${
                         isSelected ? "ring-2 ring-green-400" : ""
@@ -170,13 +153,13 @@ const Dashboard = () => {
               <h3 className="text-lg font-bold mb-2">Selected Tracks ({selectedTracks.length}/3)</h3>
               <ul className="space-y-2 mb-4">
                 {selectedTracks.map((track) => (
-                  <li key={track.id} className="flex justify-between items-center bg-gray-800 p-3 rounded">
+                  <li key={track.song_id} className="flex justify-between items-center bg-gray-800 p-3 rounded">
                     <div>
                       <p className="font-semibold">{track.name}</p>
                       <p className="text-sm text-gray-400">{track.artists}</p>
                     </div>
                     <button
-                      onClick={() => setSelectedTracks(selectedTracks.filter((t) => t.id !== track.id))}
+                      onClick={() => setSelectedTracks(selectedTracks.filter((t) => t.song_id !== track.song_id))}
                       className="text-red-400 hover:text-red-500"
                     >
                       Remove
@@ -188,16 +171,8 @@ const Dashboard = () => {
                 onClick={handleRecommend}
                 className="w-full p-3 bg-purple-500 rounded font-bold hover:bg-purple-600"
               >
-                Recommend based on {selectedTracks.length} track{selectedTracks.length > 1 ? "s" : ""}
+                Recommend based on 3 tracks
               </button>
-            </div>
-          )}
-
-          {recommendations.length > 0 && (
-            <div className="mt-8 bg-gray-800 p-4 rounded shadow">
-              <h3 className="text-lg font-bold mb-2">Recommended Track</h3>
-              <p className="text-white font-semibold">{recommendations[0].name}</p>
-              <p className="text-gray-400">{recommendations[0].artists}</p>
             </div>
           )}
         </div>
