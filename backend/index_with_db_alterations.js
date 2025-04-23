@@ -18,36 +18,29 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// GET /api/recommend-cluster - Generate track recommendations based on cluster similarity
-app.get("/api/recommend-cluster", async (req, res) => {
-  const { ids, n = 3, user_id } = req.query;
-  const idList = ids ? ids.split(",").map(Number) : [];
+// GET /api/search - Search for songs by name or artist
+app.get("/api/search", async (req, res) => {
+  const { query } = req.query;
 
-  console.log("Request received", { ids, n, user_id });
-
-  if (idList.length !== 3) {
-    console.warn("Invalid number of track IDs:", idList);
-    return res.status(400).json({ error: "Exactly 3 track IDs are required" });
-  }
-
-  if (!user_id) {
-    console.warn("Missing user_id in request");
-    return res.status(400).json({ error: "Missing user_id" });
+  if (!query || query.trim() === "") {
+    return res.status(400).json({ error: "Missing or empty search query" });
   }
 
   try {
-    // Step 1: Fetch selected songs
-    console.log("Fetching selected songs");
-    const { data: selected, error: selectedError } = await supabase
+    const { data, error } = await supabase
       .from("songs_with_clusters")
-      .select("*")
-      .in("song_id", idList);
+      .select("song_id, name, artists")
+      .or(`name.ilike.%${query}%,artists.ilike.%${query}%`)
+      .limit(15);
 
-    if (selectedError) throw selectedError;
-    if (selected.length !== 3) {
-      console.warn("Not all selected tracks found", { found: selected.length });
-      return res.status(404).json({ error: "One or more selected tracks not found" });
-    }
+    if (error) throw error;
+
+    res.json({ results: data });
+  } catch (err) {
+    console.error("Search error:", err);
+    res.status(500).json({ error: "Failed to search tracks" });
+  }
+});
 
     // Step 2: Insert new query row
     console.log("Inserting query for user_id:", user_id);
