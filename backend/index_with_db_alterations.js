@@ -1,113 +1,71 @@
-// Load environment variables from .env file
-require("dotenv").config();
-
-const express = require("express");
-const cors = require("cors");
-const { createClient } = require("@supabase/supabase-js");
-
-const app = express();
-const PORT = 3001;
-
-// Middleware setup
-app.use(cors()); // Enable CORS for cross-origin requests
-app.use(express.json()); // Parse incoming JSON requests
-
-// Initialize Supabase client with environment variables
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-// GET /api/search - Search for songs by name or artist
-app.get("/api/search", async (req, res) => {
-  const { query } = req.query;
-
-  if (!query || query.trim() === "") {
-    return res.status(400).json({ error: "Missing or empty search query" });
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from("songs_with_clusters")
-      .select("song_id, name, artists")
-      .or(`name.ilike.%${query}%,artists.ilike.%${query}%`)
-      .limit(15);
-
-    if (error) throw error;
-
-    res.json({ results: data });
-  } catch (err) {
-    console.error("Search error:", err);
-    res.status(500).json({ error: "Failed to search tracks" });
-  }
-});
-
 // GET /api/recommend-cluster - Generate track recommendations based on cluster similarity
 app.get("/api/recommend-cluster", async (req, res) => {
-  const { ids, user_id, n = 3 } = req.query;
-  const idList = ids ? ids.split(",") : [];
+  const { ids, n = 3, user_id } = req.query;
+  const idList = ids ? ids.split(",").map(Number) : [];
+
+  console.log("Request received", { ids, n, user_id });
 
   if (idList.length !== 3) {
+    console.warn("Invalid number of track IDs:", idList);
     return res.status(400).json({ error: "Exactly 3 track IDs are required" });
   }
 
+  if (!user_id) {
+    console.warn("Missing user_id in request");
+    return res.status(400).json({ error: "Missing user_id" });
+  }
+
   try {
-    // Step 1: Fetch the selected songs by their IDs
+    // Step 1: Fetch selected songs
+    console.log("Fetching selected songs");
     const { data: selected, error: selectedError } = await supabase
       .from("songs_with_clusters")
       .select("*")
-      .in("song_id", idList.map(Number));
+      .in("song_id", idList);
 
     if (selectedError) throw selectedError;
-
     if (selected.length !== 3) {
+      console.warn("Not all selected tracks found", { found: selected.length });
       return res.status(404).json({ error: "One or more selected tracks not found" });
     }
 
-    // Step 1.5: Compute averages of the numeric features
-    const avg = (field) =>
-      selected.reduce((sum, s) => sum + parseFloat(s[field] ?? 0), 0) / 3;
+    // Step 2: Insert new query row
+    console.log("Inserting query for user_id:", user_id);
+    const { data: insertedQuery, error: insertError } = await supabase
+      .from("recommendation_queries")
+      .insert([{ user_id: parseInt(user_id) }])
+      .select("query_id")
+      .single();
 
-    const avgValues = {
-      popularity: avg("popularity"),
-      danceability: avg("danceability"),
-      energy: avg("energy"),
-      valence: avg("valence"),
-      tempo: avg("tempo"),
-      acousticness: avg("acousticness"),
-      liveness: avg("liveness"),
-      speechiness: avg("speechiness"),
-      duration_ms: avg("duration_ms"),
-      key: avg("key"),
-      loudness: avg("loudness"),
-      mode: avg("mode"),
-      instrumentalness: avg("instrumentalness"),
-      time_signature: avg("time_signature"),
-    };
+    if (insertError) throw insertError;
+    const query_id = insertedQuery.query_id;
+    console.log("Created query_id:", query_id);
 
-    if (user_id) {
-      // Step 1.6: Upsert into user_data table
-      const { error: upsertError } = await supabase
-        .from("user_data")
-        .upsert([{ user_id, ...avgValues }], { onConflict: "user_id" });
+    // Step 3: Insert seed songs into query_seeds
+    const seedInserts = idList.map((song_id, idx) => ({
+      query_id,
+      seed_rank: idx + 1,
+      song_id,
+    }));
+    console.log("Inserting seeds:", seedInserts);
+    const { error: seedsError } = await supabase
+      .from("query_seeds")
+      .insert(seedInserts);
 
-      if (upsertError) throw upsertError;
-    }
+    if (seedsError) throw seedsError;
 
-    // Step 2: Fetch all songs for filtering recommendations
+    // Step 4: Fetch all songs
+    console.log("Fetching all songs");
     const { data: allSongs, error: allError } = await supabase
       .from("songs_with_clusters")
       .select("*");
 
     if (allError) throw allError;
 
-    // Step 3: Determine which cluster level matches all 3 or 2 out of 3 tracks
+    // Step 5: Cluster matching
     const clusterLevels = ["cluster1", "cluster2", "cluster3", "cluster4", "cluster5"];
-    let matchedCluster = null;
-    let clusterValue = null;
-    let matchType = "none";
+    let matchedCluster = null, clusterValue = null, matchType = "none";
 
-    // Check if all 3 tracks match in any cluster level
     for (const level of clusterLevels) {
       const values = selected.map((s) => s[level]);
       if (values.every((v) => v === values[0])) {
@@ -118,7 +76,6 @@ app.get("/api/recommend-cluster", async (req, res) => {
       }
     }
 
-    // If no all-match, check for 2 out of 3 match in any cluster level
     if (!matchedCluster) {
       for (const level of clusterLevels) {
         const valueCount = {};
@@ -126,7 +83,6 @@ app.get("/api/recommend-cluster", async (req, res) => {
           const val = s[level];
           valueCount[val] = (valueCount[val] || 0) + 1;
         }
-
         const twoMatch = Object.entries(valueCount).find(([val, count]) => count === 2);
         if (twoMatch) {
           matchedCluster = level;
@@ -137,16 +93,16 @@ app.get("/api/recommend-cluster", async (req, res) => {
       }
     }
 
-    // Fallback: use the cluster3 value from the first track
     if (!matchedCluster) {
       matchedCluster = "cluster3";
       clusterValue = selected[0][matchedCluster];
       matchType = "1 of 3 (fallback)";
     }
 
-    // Step 4: Filter and sort recommendations
-    const idSet = new Set(idList.map(Number));
+    console.log("Cluster matching result:", { matchedCluster, clusterValue, matchType });
 
+    // Step 6: Filter and sort recommendations
+    const idSet = new Set(idList);
     const recommendations = allSongs
       .filter((song) =>
         !idSet.has(song.song_id) && song[matchedCluster] == clusterValue
@@ -154,15 +110,31 @@ app.get("/api/recommend-cluster", async (req, res) => {
       .sort((a, b) => b.popularity - a.popularity)
       .slice(0, parseInt(n));
 
-    // Return recommendations
-    res.json({ recommendations, clusterUsed: matchedCluster, matchType });
+    console.log("Top recommendations:", recommendations.map(r => r.song_id));
+
+    // Step 7: Insert recommendations into query_results
+    const recInserts = recommendations.map((song, idx) => ({
+      query_id,
+      result_rank: idx + 1,
+      song_id: song.song_id,
+      similarity: 1.0,
+    }));
+
+    console.log("Inserting recommendations:", recInserts);
+    const { error: recError } = await supabase
+      .from("query_results")
+      .insert(recInserts);
+
+    if (recError) throw recError;
+
+    // Final response
+    res.json({
+      recommendations,
+      clusterUsed: matchedCluster,
+      matchType,
+    });
   } catch (err) {
     console.error("Recommendation error:", err);
     res.status(500).json({ error: err.message });
   }
-});
-
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Backend running at http://localhost:${PORT}`);
 });
