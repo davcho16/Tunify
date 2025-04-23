@@ -1,3 +1,23 @@
+// Load environment variables from .env file
+require("dotenv").config();
+
+const express = require("express");
+const cors = require("cors");
+const { createClient } = require("@supabase/supabase-js");
+
+const app = express();
+const PORT = 3001;
+
+// Middleware setup
+app.use(cors()); // Enable CORS for cross-origin requests
+app.use(express.json()); // Parse incoming JSON requests
+
+// Initialize Supabase client with environment variables
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 // GET /api/recommend-cluster - Generate track recommendations based on cluster similarity
 app.get("/api/recommend-cluster", async (req, res) => {
   const { ids, n = 3, user_id } = req.query;
