@@ -42,53 +42,47 @@ app.get("/api/search", async (req, res) => {
   }
 });
 
-// GET /api/recommend-cluster - Generate track recommendations based on cluster similarity
 app.get("/api/recommend-cluster", async (req, res) => {
   const { ids, n = 3 } = req.query;
-  const idList = ids ? ids.split(",") : [];
+  const idList = ids ? ids.split(",").map(Number) : [];
 
   if (idList.length !== 3) {
     return res.status(400).json({ error: "Exactly 3 track IDs are required" });
   }
 
   try {
-    // Step 1: Fetch the selected songs by their IDs
+    // Step 1: Fetch selected songs
     const { data: selected, error: selectedError } = await supabase
       .from("songs_with_clusters")
       .select("*")
-      .in("song_id", idList.map(Number));
+      .in("song_id", idList);
 
     if (selectedError) throw selectedError;
-
     if (selected.length !== 3) {
       return res.status(404).json({ error: "One or more selected tracks not found" });
     }
 
-    // Step 2: Fetch all songs for filtering recommendations
+    // Step 2: Fetch all songs
     const { data: allSongs, error: allError } = await supabase
       .from("songs_with_clusters")
       .select("*");
 
     if (allError) throw allError;
 
-    // Step 3: Determine which cluster level matches all 3 or 2 out of 3 tracks
+    // Step 3: Match cluster level
     const clusterLevels = ["cluster1", "cluster2", "cluster3", "cluster4", "cluster5"];
     let matchedCluster = null;
     let clusterValue = null;
-    let matchType = "none";
 
-    // Check if all 3 tracks match in any cluster level
     for (const level of clusterLevels) {
       const values = selected.map((s) => s[level]);
       if (values.every((v) => v === values[0])) {
         matchedCluster = level;
         clusterValue = values[0];
-        matchType = "all 3";
         break;
       }
     }
 
-    // If no all-match, check for 2 out of 3 match in any cluster level
     if (!matchedCluster) {
       for (const level of clusterLevels) {
         const valueCount = {};
@@ -96,36 +90,65 @@ app.get("/api/recommend-cluster", async (req, res) => {
           const val = s[level];
           valueCount[val] = (valueCount[val] || 0) + 1;
         }
-
         const twoMatch = Object.entries(valueCount).find(([val, count]) => count === 2);
         if (twoMatch) {
           matchedCluster = level;
           clusterValue = twoMatch[0];
-          matchType = "2 of 3";
           break;
         }
       }
     }
 
-    // Fallback: use the cluster3 value from the first track
     if (!matchedCluster) {
       matchedCluster = "cluster3";
       clusterValue = selected[0][matchedCluster];
-      matchType = "1 of 3 (fallback)";
     }
 
-    // Step 4: Filter and sort recommendations
-    const idSet = new Set(idList.map(Number));
-
+    // Step 4: Get top recommendations
+    const idSet = new Set(idList);
     const recommendations = allSongs
-      .filter((song) =>
-        !idSet.has(song.song_id) && song[matchedCluster] == clusterValue
-      )
+      .filter((song) => !idSet.has(song.song_id) && song[matchedCluster] == clusterValue)
       .sort((a, b) => b.popularity - a.popularity)
       .slice(0, parseInt(n));
 
-    // Return recommendations
-    res.json({ recommendations, clusterUsed: matchedCluster, matchType });
+    // Pad recommendations to ensure 3 values for query_results
+    while (recommendations.length < 3) {
+      recommendations.push({ song_id: null });
+    }
+
+    // Step 5: Insert into query_seeds and get generated UUID
+    const { data: seedInsert, error: seedError } = await supabase
+      .from("query_seeds")
+      .insert({
+        song_id1: idList[0],
+        song_id2: idList[1],
+        song_id3: idList[2],
+      })
+      .select("query_id")
+      .single();
+
+    if (seedError) throw seedError;
+
+    const queryId = seedInsert.query_id;
+
+    // Step 6: Insert into query_results
+    const { error: resultError } = await supabase
+      .from("query_results")
+      .insert({
+        query_id: queryId,
+        song_id1: recommendations[0]?.song_id ?? null,
+        song_id2: recommendations[1]?.song_id ?? null,
+        song_id3: recommendations[2]?.song_id ?? null,
+      });
+
+    if (resultError) throw resultError;
+
+    // Step 7: Respond
+    res.json({
+      recommendations,
+      query_id: queryId,
+      clusterUsed: matchedCluster,
+    });
   } catch (err) {
     console.error("Recommendation error:", err);
     res.status(500).json({ error: err.message });
