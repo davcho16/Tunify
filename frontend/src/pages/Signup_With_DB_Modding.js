@@ -11,7 +11,7 @@ const Signup = () => {
     e.preventDefault();
     setError(null);
 
-    const { error: signupError } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -19,8 +19,8 @@ const Signup = () => {
       },
     });
 
-    if (signupError) {
-      setError(signupError.message);
+    if (error) {
+      setError(error.message);
       return;
     }
 
@@ -82,3 +82,4 @@ const Signup = () => {
 };
 
 export default Signup;
+
