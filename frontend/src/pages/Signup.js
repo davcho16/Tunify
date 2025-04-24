@@ -24,6 +24,21 @@ const Signup = () => {
       return;
     }
 
+    // Insert user data into custom 'users' table
+    const { error: insertError } = await supabase
+      .from("users")
+      .insert([
+        {
+          username: username,
+          email: email,
+          password: password, // consider hashing this before inserting
+        },
+      ]);
+
+    if (insertError) {
+      console.error("Error inserting into users table:", insertError.message);
+    }
+
     alert("Signup successful! Check your email to confirm.");
   };
 
