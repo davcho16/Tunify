@@ -13,11 +13,11 @@ const ResetPassword = () => {
     setError(null);
     setSuccess(null);
 
-    // Update the user's password in Supabase Auth
-    const { error: authError } = await supabase.auth.updateUser({ password });
+    // Update the user's password in Supabase
+    const { error } = await supabase.auth.updateUser({ password });
 
-    if (authError) {
-      setError(authError.message);
+    if (error) {
+      setError(error.message);
       return;
     }
 
@@ -31,7 +31,7 @@ const ResetPassword = () => {
       setError("Unable to fetch user info.");
       return;
     }
-
+	
     // Update the password in the custom 'users' table
     const { error: dbError } = await supabase
       .from("users")
@@ -44,7 +44,7 @@ const ResetPassword = () => {
     }
 
     setSuccess("Password updated successfully! Redirecting to login...");
-    setTimeout(() => navigate("/"), 1000);
+    setTimeout(() => navigate("/"), 1000); // Redirect to login after 1 seconds
   };
 
   return (
