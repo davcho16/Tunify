@@ -21,6 +21,28 @@ const ResetPassword = () => {
       return;
     }
 
+    // Get the current user
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      setError("Unable to fetch user info.");
+      return;
+    }
+	
+    // Update the password in the custom 'users' table
+    const { error: dbError } = await supabase
+      .from("users")
+      .update({ password })
+      .eq("email", user.email);
+
+    if (dbError) {
+      setError("Password updated in auth but failed to update in database.");
+      return;
+    }
+
     setSuccess("Password updated successfully! Redirecting to login...");
     setTimeout(() => navigate("/"), 1000); // Redirect to login after 1 seconds
   };
