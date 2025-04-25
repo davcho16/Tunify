@@ -65,7 +65,7 @@ app.post("/api/recommend-cluster", async (req, res) => {
 
     const user_id = userLookup.user_id;
 
-    // Step 1: Fetch selected songs
+    // Step 1: Fetch selected songs column
     const { data: selected, error: selectedError } = await supabase
       .from("songs_with_clusters")
       .select("*")
