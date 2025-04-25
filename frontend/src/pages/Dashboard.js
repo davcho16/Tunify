@@ -63,28 +63,41 @@ const Dashboard = () => {
       setError("Please select exactly 3 tracks for recommendations.");
       return;
     }
-
+  
     setError(null);
-
+  
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const email = userData?.user?.email;
       const ids = selectedTracks.map((t) => t.song_id).join(",");
-      const response = await fetch(`http://localhost:3001/api/recommend-cluster?ids=${ids}&n=3`);
-      const data = await response.json();
-
+  
+      const response = await fetch("http://localhost:3001/api/recommend-cluster", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, email }),
+      });
+  
+      let data;
+      try {
+        data = await response.json();
+      } catch (err) {
+        throw new Error("Invalid response from server. Try again later.");
+      }
+  
       if (!response.ok) throw new Error(data.error || "Recommendation failed");
-
+  
       if (!data.recommendations || data.recommendations.length === 0) {
         setError("No similar song found.");
       } else {
         navigate("/recommendation", {
-          state: { recommendations: data.recommendations }
+          state: { recommendations: data.recommendations },
         });
       }
     } catch (err) {
       console.error("Recommend error:", err);
       setError(err.message);
     }
-  };
+  };  
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-900 text-white p-6">

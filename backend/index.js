@@ -42,21 +42,34 @@ app.get("/api/search", async (req, res) => {
   }
 });
 
-app.get("/api/recommend-cluster", async (req, res) => {
-  const { ids, n = 3 } = req.query;
+// POST /api/recommend-cluster - Recommend api endpoint and sending information to store in database
+app.post("/api/recommend-cluster", async (req, res) => {
+  const { ids, n = 3, email } = req.body;
   const idList = ids ? ids.split(",").map(Number) : [];
 
-  if (idList.length !== 3) {
-    return res.status(400).json({ error: "Exactly 3 track IDs are required" });
+  if (idList.length !== 3 || !email) {
+    return res.status(400).json({ error: "Exactly 3 track IDs and email are required" });
   }
 
   try {
+    // Lookup numeric user_id from users table
+    const { data: userLookup, error: userLookupError } = await supabase
+      .from("users")
+      .select("user_id")
+      .eq("email", email)
+      .single();
+
+    if (userLookupError || !userLookup) {
+      return res.status(400).json({ error: "User not found in users table" });
+    }
+
+    const user_id = userLookup.user_id;
+
     // Step 1: Fetch selected songs
     const { data: selected, error: selectedError } = await supabase
       .from("songs_with_clusters")
       .select("*")
       .in("song_id", idList);
-
     if (selectedError) throw selectedError;
     if (selected.length !== 3) {
       return res.status(404).json({ error: "One or more selected tracks not found" });
@@ -66,7 +79,6 @@ app.get("/api/recommend-cluster", async (req, res) => {
     const { data: allSongs, error: allError } = await supabase
       .from("songs_with_clusters")
       .select("*");
-
     if (allError) throw allError;
 
     // Step 3: Match cluster level
@@ -111,12 +123,11 @@ app.get("/api/recommend-cluster", async (req, res) => {
       .sort((a, b) => b.popularity - a.popularity)
       .slice(0, parseInt(n));
 
-    // Pad recommendations to ensure 3 values for query_results
     while (recommendations.length < 3) {
       recommendations.push({ song_id: null });
     }
 
-    // Step 5: Insert into query_seeds and get generated UUID
+    // Step 5: Insert into query_seeds
     const { data: seedInsert, error: seedError } = await supabase
       .from("query_seeds")
       .insert({
@@ -126,7 +137,6 @@ app.get("/api/recommend-cluster", async (req, res) => {
       })
       .select("query_id")
       .single();
-
     if (seedError) throw seedError;
 
     const queryId = seedInsert.query_id;
@@ -140,10 +150,19 @@ app.get("/api/recommend-cluster", async (req, res) => {
         song_id2: recommendations[1]?.song_id ?? null,
         song_id3: recommendations[2]?.song_id ?? null,
       });
-
     if (resultError) throw resultError;
 
-    // Step 7: Respond
+    // Step 7: Insert into recommendation_queries
+    const { error: logError } = await supabase.from("recommendation_queries").insert({
+      user_id,
+      query_id: queryId,
+      created_at: new Date().toISOString(),
+    });
+    if (logError) {
+      console.error("Logging recommendation failed:", logError.message);
+    }
+
+    // Step 8: Respond
     res.json({
       recommendations,
       query_id: queryId,
@@ -154,6 +173,7 @@ app.get("/api/recommend-cluster", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // Start the server
 app.listen(PORT, () => {

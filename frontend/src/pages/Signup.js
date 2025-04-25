@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../supabase";
+import bcrypt from "bcryptjs";
 
 const Signup = () => {
   const [email, setEmail] = useState("");
@@ -11,35 +12,38 @@ const Signup = () => {
     e.preventDefault();
     setError(null);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { display_name: username }, 
-      },
-    });
+    try {
+      // Step 1: Sign up the user with Supabase Auth
+      const { error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { display_name: username },
+        },
+      });
 
-    if (error) {
-      setError(error.message);
-      return;
-    }
+      if (authError) throw authError;
 
-    // Insert user data into custom 'users' table
-    const { error: insertError } = await supabase
-      .from("users")
-      .insert([
+      // Step 2: Hash the password before storing it
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Step 3: Insert into 'users' table with hashed password
+      const { error: insertError } = await supabase.from("users").insert([
         {
           username: username,
           email: email,
-          password: password, // consider hashing this before inserting
+          password: hashedPassword,
         },
       ]);
 
-    if (insertError) {
-      console.error("Error inserting into users table:", insertError.message);
-    }
+      if (insertError) {
+        console.error("Insert error:", insertError.message);
+      }
 
-    alert("Signup successful! Check your email to confirm.");
+      alert("Signup pending! Check your email to confirm/authenticate.");
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   return (
@@ -71,7 +75,7 @@ const Signup = () => {
             className="w-full p-3 rounded bg-gray-700 border border-gray-600"
             required
           />
-          <button type="submit" className="w-full p-3 bg-green-500 rounded">
+          <button type="submit" className="w-full p-3 bg-green-500 rounded font-bold hover:bg-green-600">
             Sign Up
           </button>
         </form>
